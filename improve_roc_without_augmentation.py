@@ -97,10 +97,13 @@ def fine_tune_model(model: models.Model, base_model_layers: int) -> None:
     model.compile(optimizer=Adam(learning_rate=1e-4), loss="categorical_crossentropy", metrics=["accuracy"])
 
 
-def plot_roc_pr_curves(y_true: np.ndarray, y_pred_prob: np.ndarray, class_indices: dict) -> None:
+def plot_roc_pr_curves(
+    y_true: np.ndarray, y_pred_prob: np.ndarray, class_indices: dict
+) -> None:
     """Plot ROC and PR curves for each class."""
     import matplotlib.pyplot as plt
 
+    # Use the provided dictionary instead of relying on a global variable.
     for i, class_name in enumerate(class_indices.keys()):
         fpr, tpr, _ = roc_curve((y_true == i).astype(int), y_pred_prob[:, i])
         roc_auc = auc(fpr, tpr)
