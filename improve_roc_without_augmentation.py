@@ -10,8 +10,21 @@ from tensorflow.keras import layers, models
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.optimizers import Adam
 
-# Update this path to your dataset
-DATASET_PATH = "/content/drive/My Drive/DataSet/IEEE13Polaridad_V7/"
+# Si el script se ejecuta en Google Colab, se monta Google Drive de forma
+# automática para acceder al conjunto de datos.
+try:  # pragma: no cover - instrucción específica para Colab
+    from google.colab import drive
+
+    drive.mount("/content/drive")
+except Exception:
+    # En entornos fuera de Colab simplemente continuamos.
+    pass
+
+# Ruta del conjunto de datos (puede sobrescribirse con la variable de entorno
+# DATASET_PATH). Por defecto apunta a Google Drive.
+DATASET_PATH = os.getenv(
+    "DATASET_PATH", "/content/drive/My Drive/DataSet/IEEE13Polaridad_V7/"
+)
 IMG_SIZE = (299, 299)
 BATCH_SIZE = 32
 EPOCHS = 25
@@ -112,6 +125,9 @@ def plot_roc_pr_curves(y_true: np.ndarray, y_pred_prob: np.ndarray, class_indice
 
 
 if __name__ == "__main__":
+    if not os.path.isdir(DATASET_PATH):
+        raise FileNotFoundError(f"No se encontró la ruta de datos: {DATASET_PATH}")
+
     df_images = create_dataframe_from_images(DATASET_PATH)
     visualize_dataset_per_class(df_images)
 
