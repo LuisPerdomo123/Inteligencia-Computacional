@@ -7,8 +7,9 @@ from sklearn.metrics import (classification_report, confusion_matrix,
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.applications import InceptionV3
 from tensorflow.keras import layers, models
-from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 from tensorflow.keras.optimizers import Adam
+from sklearn.utils.class_weight import compute_class_weight
 
 # Si el script se ejecuta en Google Colab, se monta Google Drive de forma
 # automática para acceder al conjunto de datos.
@@ -25,6 +26,7 @@ except Exception:
 DATASET_PATH = os.getenv(
     "DATASET_PATH", "/content/drive/My Drive/DataSet/IEEE13Polaridad_V7/"
 )
+MODEL_OUTPUT_PATH = os.getenv("MODEL_OUTPUT_PATH", "trained_model.h5")
 IMG_SIZE = (299, 299)
 BATCH_SIZE = 32
 EPOCHS = 25
@@ -69,6 +71,16 @@ def visualize_dataset_per_class(df: pd.DataFrame, num_samples: int = 5) -> None:
                 plt.imshow(image)
                 plt.axis("off")
         plt.show()
+
+
+def compute_class_weights(generator) -> dict:
+    """Compute class weights for imbalanced datasets."""
+    class_weights = compute_class_weight(
+        class_weight="balanced",
+        classes=np.unique(generator.classes),
+        y=generator.classes,
+    )
+    return {i: w for i, w in enumerate(class_weights)}
 
 
 def build_transfer_model(trainable: bool = False) -> models.Model:
@@ -152,8 +164,17 @@ if __name__ == "__main__":
 
     model = build_transfer_model(trainable=False)
     early_stop = EarlyStopping(monitor="val_loss", patience=3, restore_best_weights=True)
+    checkpoint = ModelCheckpoint(MODEL_OUTPUT_PATH, monitor="val_loss", save_best_only=True)
 
-    history = model.fit(train_gen, epochs=EPOCHS, validation_data=val_gen, callbacks=[early_stop])
+    class_weights = compute_class_weights(train_gen)
+
+    history = model.fit(
+        train_gen,
+        epochs=EPOCHS,
+        validation_data=val_gen,
+        callbacks=[early_stop, checkpoint],
+        class_weight=class_weights,
+    )
 
     # Fine tuning: unfreeze top 50 layers and train with smaller learning rate
     fine_tune_model(model, base_model_layers=50)
@@ -161,7 +182,8 @@ if __name__ == "__main__":
         train_gen,
         epochs=FINE_TUNE_EPOCHS,
         validation_data=val_gen,
-        callbacks=[early_stop],
+        callbacks=[early_stop, checkpoint],
+        class_weight=class_weights,
     )
 
     # Evaluation
@@ -174,3 +196,11 @@ if __name__ == "__main__":
     print("Confusion Matrix:", confusion_matrix(y_true, y_pred))
 
     plot_roc_pr_curves(y_true, y_pred_prob, val_gen.class_indices)
+
+    for i, class_name in enumerate(val_gen.class_indices.keys()):
+        fpr, tpr, _ = roc_curve((y_true == i).astype(int), y_pred_prob[:, i])
+        roc_auc = auc(fpr, tpr)
+        print(f"AUC for {class_name}: {roc_auc:.2f}")
+
+    # Serialize model
+    model.save(MODEL_OUTPUT_PATH)
